@@ -3,10 +3,13 @@ package com.itfitness.facealive.widget
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.graphics.Point
 import android.hardware.Camera
 import android.util.AttributeSet
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import java.util.*
 
 class FaceCameraView : SurfaceView, SurfaceHolder.Callback, Camera.AutoFocusCallback, Runnable, Camera.PreviewCallback{
 
@@ -15,6 +18,7 @@ class FaceCameraView : SurfaceView, SurfaceHolder.Callback, Camera.AutoFocusCall
     private var screenHeight: Int = 0//屏幕的高度
     private var screenWidth: Int = 0//屏幕的宽度
     private var isPreviewing: Boolean = false//是否在预览
+    var previewSize:Camera.Size? = null//设置的预览分辨率
     var preViewCallBack:PreviewCallBack? = null//相机预览数据回调接口
     constructor(context: Context) : super(context){
         preDispose()
@@ -59,19 +63,20 @@ class FaceCameraView : SurfaceView, SurfaceHolder.Callback, Camera.AutoFocusCall
     private fun setCameraParameters() {
         val parameters = mCamera!!.parameters
         val sizes = parameters.supportedPreviewSizes
-        //确定前面定义的预览宽高是camera支持的，不支持取就更大的
-        for (i in 0 .. sizes.size) {
-            if (sizes[i].width >= screenWidth && sizes[i].height >= screenHeight || i == sizes.size - 1) {
-                screenWidth = sizes[i].width
-                screenHeight = sizes[i].height
-                break
+        var temp = 10f
+        previewSize = sizes[0]//最佳分辨率(最佳的长宽比与屏幕的长宽比差值最小)
+        for (i in sizes.indices) {
+            val abs = Math.abs(sizes[i].width.toFloat() / sizes[i].height.toFloat() - screenWidth.toFloat() / screenHeight.toFloat())
+            if(temp>abs){
+                temp = abs
+                previewSize = sizes[i]
             }
         }
         //设置最终确定的预览大小
-        parameters.setPreviewSize(screenWidth, screenHeight)
+        parameters.setPreviewSize(previewSize!!.width, previewSize!!.height)
+        parameters.previewFormat = ImageFormat.NV21
         mCamera!!.parameters = parameters
     }
-
     /**
      * 释放相机
      */
@@ -99,7 +104,7 @@ class FaceCameraView : SurfaceView, SurfaceHolder.Callback, Camera.AutoFocusCall
      */
     fun startPreview() {
         if (mCamera != null) {
-            mCamera!!.addCallbackBuffer(ByteArray(screenWidth * screenHeight * ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8))
+            mCamera!!.addCallbackBuffer(ByteArray(previewSize!!.width * previewSize!!.height * ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8))
             mCamera!!.setPreviewCallbackWithBuffer(this)
             mCamera!!.startPreview()
             if (isSupportAutoFocus) {
@@ -132,6 +137,7 @@ class FaceCameraView : SurfaceView, SurfaceHolder.Callback, Camera.AutoFocusCall
         }
     }
     override fun onPreviewFrame(data: ByteArray?, camera: Camera?) {
+        camera!!.addCallbackBuffer(data)
         if(preViewCallBack!=null){
             preViewCallBack!!.onPreview(data!!,camera!!)
         }
